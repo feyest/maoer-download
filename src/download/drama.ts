@@ -2,6 +2,8 @@ import axios from "axios";
 import { dramaInfoPath, dramaSearchPath } from "../paths";
 import { downloadAudio, getSoundPath } from "./audio";
 import * as fs from "fs";
+import PQueue from "p-queue";
+import { pqueueConcurrency } from "../config";
 
 interface DramaSearchResultInfo {
   info: { Datas: DramaSearchResult[] };
@@ -86,9 +88,12 @@ async function processDramaForDownload(
     return [];
   }
 
-  const episodesSoundPaths = await Promise.all(
-    completeDrama.episodes.episode.map((episode) =>
-      getSoundPath(episode.sound_id, cookie)
+  // Queue with limited concurrency so we don't get blacklisted
+  const queue = new PQueue({ concurrency: pqueueConcurrency });
+
+  const episodesSoundPaths = await queue.addAll(
+    completeDrama.episodes.episode.map(
+      (episode) => () => getSoundPath(episode.sound_id, cookie)
     )
   );
 
@@ -129,12 +134,16 @@ async function downloadEpisodesForDrama(
     recursive: true,
   });
 
-  await Promise.all(
-    drama.episodes.map((episode) =>
-      downloadAudio(
-        episode.soundurl,
-        getDownloadPathToFile({ downloadPath, drama, episode })
-      )
+  // Queue with limited concurrency so we don't get blacklisted
+  const queue = new PQueue({ concurrency: pqueueConcurrency });
+
+  await queue.addAll(
+    drama.episodes.map(
+      (episode) => () =>
+        downloadAudio(
+          episode.soundurl,
+          getDownloadPathToFile({ downloadPath, drama, episode })
+        )
     )
   );
 }
