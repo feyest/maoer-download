@@ -1,0 +1,11 @@
+{
+  "name": "my-project",
+  "jest": {
+    "verbose": true
+  },
+  "moduleFileExtensions": [
+    "js",
+    "ts",
+    "tsx"
+  ]
+}
