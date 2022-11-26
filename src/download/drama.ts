@@ -65,16 +65,11 @@ export async function searchDramaByName(
 // Search for complete drama download details with all episodes.
 export async function getDramaForDownload(
   dramaId: number
-): Promise<FullDramaDetails | null> {
-  try {
-    const response = await axios.get<DramaInfo>(dramaInfoPath, {
-      params: { drama_id: dramaId },
-    });
-    return response.data.info;
-  } catch (err) {
-    console.error("Couldn't get drama by name");
-    return null;
-  }
+): Promise<FullDramaDetails> {
+  const response = await axios.get<DramaInfo>(dramaInfoPath, {
+    params: { drama_id: dramaId },
+  });
+  return response.data.info;
 }
 
 async function processDramaForDownload(
@@ -82,34 +77,28 @@ async function processDramaForDownload(
   cookie?: string
 ): Promise<EpisodeForDownload[]> {
   // Query deeper for drama details
-  const completeDrama = await getDramaForDownload(drama.id);
-  if (!completeDrama) {
-    console.log(`Couldn't find complete drama details for ${drama.name}`);
-    return [];
-  }
+  try {
+    const completeDrama = await getDramaForDownload(drama.id);
+    // Queue with limited concurrency so we don't get blacklisted
+    const queue = new PQueue({ concurrency: pqueueConcurrency });
 
-  // Queue with limited concurrency so we don't get blacklisted
-  const queue = new PQueue({ concurrency: pqueueConcurrency });
+    const episodesSoundPaths = await queue.addAll(
+      completeDrama.episodes.episode.map(
+        (episode) => () => getSoundPath(episode.sound_id, cookie)
+      )
+    );
 
-  const episodesSoundPaths = await queue.addAll(
-    completeDrama.episodes.episode.map(
-      (episode) => () => getSoundPath(episode.sound_id, cookie)
-    )
-  );
-
-  return completeDrama.episodes.episode
-    .map((episode, index) => {
+    return completeDrama.episodes.episode.map((episode, index) => {
       const soundUrl = episodesSoundPaths[index];
-      if (!soundUrl) {
-        return null;
-      } else {
-        return {
-          ...episode,
-          soundurl: soundUrl,
-        };
-      }
-    })
-    .filter(isNotNullorUndefined);
+
+      return {
+        ...episode,
+        soundurl: soundUrl,
+      };
+    });
+  } catch (err) {
+    throw new Error(`Couldn't find complete drama details for ${drama.name}`);
+  }
 }
 
 export async function processDramasForDownload(
@@ -180,8 +169,4 @@ function getDownloadPathToFile({
     downloadPath,
     drama,
   })}/${episode.name}.mp4`;
-}
-
-function isNotNullorUndefined<T>(value: T | null | undefined): value is T {
-  return value !== null && value !== undefined;
 }

@@ -23,25 +23,23 @@ export interface AudioInfo {
 export async function getSoundPath(
   soundId: number,
   cookie?: string
-): Promise<string | null> {
-  try {
-    const response = await axios.get<AudioInfo>(audioInfoPath, {
-      headers: cookie ? { cookie } : {},
-      params: { soundid: soundId },
-    });
-    return (
-      response.data.info.sound.soundurl ??
-      response.data.info.sound.soundurl_128 ??
-      null
-    );
-  } catch (err) {
-    console.log(err);
-    console.error("Couldn't fetch audio path.");
-    return null;
+): Promise<string> {
+  const response = await axios.get<AudioInfo>(audioInfoPath, {
+    headers: cookie ? { cookie } : {},
+    params: { soundid: soundId },
+  });
+
+  const soundUrl =
+    response.data.info.sound.soundurl ?? response.data.info.sound.soundurl_128;
+
+  if (soundUrl) {
+    return soundUrl;
+  } else {
+    throw new Error("Couldn't fetch audio path");
   }
 }
 
-/** */
+/** Downloads the audio. */
 export async function downloadAudio(
   soundPath: string,
   downloadPath: string
